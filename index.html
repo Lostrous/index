@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Barcode Generator</title>
+    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.0/dist/JsBarcode.all.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/quagga@0.12.1/dist/quagga.min.js"></script>
+    <style>
+        #barcodeContainer, #previousCodes {
+            margin-top: 20px;
+        }
+        #scannerContainer {
+            width: 100%;
+            height: 300px;
+            border: 1px solid black;
+            margin-top: 20px;
+        }
+        .code-item {
+            margin-top: 10px;
+        }
+        .code-item img {
+            margin-right: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Barcode Generator</h1>
+    <input type="text" id="inputCode" placeholder="Enter code here">
+    <button onclick="generateBarcode()">Generate Barcode</button>
+    <div id="barcodeContainer">
+        <img id="barcodeImage" alt="Barcode">
+    </div>
+    <div id="confirmationContainer" style="display:none;">
+        <p id="newCode"></p>
+        <button onclick="confirmCode()">Yes</button>
+        <button onclick="rejectCode()">No</button>
+    </div>
+    
+    <button onclick="startScan()">Start Scan</button>
+    <div id="scannerContainer"></div>
+
+    <h2>Previous Codes</h2>
+    <input type="text" id="searchInput" placeholder="Search previous codes">
+    <button onclick="searchCodes()">Search</button>
+    <div id="previousCodes"></div>
+
+    <script>
+        let generatedCode = '';
+        let previousCodes = [];
+
+        function generateBarcode() {
+            const code = document.getElementById('inputCode').value;
+            generatedCode = code;
+            JsBarcode("#barcodeImage", code, {
+                format: "CODE128",
+                width: 2,
+                height: 100
+            });
+            document.getElementById('newCode').innerText = `Is this code correct? ${code}`;
+            document.getElementById('confirmationContainer').style.display = 'block';
+        }
+
+        function confirmCode() {
+            const name = prompt('Enter a name for this code:');
+            if (name) {
+                previousCodes.push({ code: generatedCode, name: name });
+                updatePreviousCodes();
+            }
+            document.getElementById('confirmationContainer').style.display = 'none';
+        }
+
+        function rejectCode() {
+            let counter = 1;
+            let newCode;
+            do {
+                newCode = generatedCode.replace(/01$/, (`0${counter}`).slice(-2));
+                counter++;
+            } while (previousCodes.some(item => item.code === newCode) && counter <= 9);
+            if (counter > 9) {
+                alert('All possible codes have been tried.');
+                return;
+            }
+            generatedCode = newCode;
+            JsBarcode("#barcodeImage", newCode, {
+                format: "CODE128",
+                width: 2,
+                height: 100
+            });
+            document.getElementById('newCode').innerText = `Is this code correct? ${newCode}`;
+        }
+
+        function updatePreviousCodes() {
+            const container = document.getElementById('previousCodes');
+            container.innerHTML = '';
+            previousCodes.forEach((item, index) => {
+                const div = document.createElement('div');
+                div.classList.add('code-item');
+                const img = document.createElement('img');
+                img.id = `prevBarcode${index}`;
+                div.appendChild(img);
+                const name = document.createElement('span');
+                name.innerText = ` ${item.name} - ${item.code}`;
+                div.appendChild(name);
+                const editBtn = document.createElement('button');
+                editBtn.innerText = 'Code did not work';
+                editBtn.onclick = () => {
+                    const newCode = prompt('Enter new code:');
+                    if (newCode) {
+                        const newIndex = previousCodes.findIndex(p => p.code === item.code);
+                        previousCodes[newIndex].code = newCode;
+                        previousCodes[newIndex].name = prompt('Enter new name:');
+                        updatePreviousCodes();
+                    }
+                };
+                div.appendChild(editBtn);
+                container.appendChild(div);
+                JsBarcode(`#prevBarcode${index}`, item.code, {
+                    format: "CODE128",
+                    width: 2,
+                    height: 50
+                });
+            });
+        }
+
+        function searchCodes() {
+            const query = document.getElementById('searchInput').value.toLowerCase();
+            const filteredCodes = previousCodes.filter(item => item.name.toLowerCase().includes(query));
+            const container = document.getElementById('previousCodes');
+            container.innerHTML = '';
+            filteredCodes.forEach((item, index) => {
+                const div = document.createElement('div');
+                div.classList.add('code-item');
+                const img = document.createElement('img');
+                img.id = `searchBarcode${index}`;
+                div.appendChild(img);
+                const name = document.createElement('span');
+                name.innerText = ` ${item.name} - ${item.code}`;
+                div.appendChild(name);
+                container.appendChild(div);
+                JsBarcode(`#searchBarcode${index}`, item.code, {
+                    format: "CODE128",
+                    width: 2,
+                    height: 50
+                });
+            });
+        }
+
+        function startScan() {
+            Quagga.init({
+                inputStream: {
+                    name: "Live",
+                    type: "LiveStream",
+                    target: document.querySelector('#scannerContainer')
+                },
+                decoder: {
+                    readers: ["code_128_reader"]
+                }
+            }, function(err) {
+                if (err) {
+                    console.error(err);
+                    return;
+                }
+                Quagga.start();
+            });
+
+            Quagga.onDetected(function(data) {
+                const scannedCode = data.codeResult.code;
+                console.log('Detected code:', scannedCode);
+                alert('Scanned code: ' + scannedCode);
+                // Automatically format scanned code
+                const formattedCode = scannedCode.replace(/01$/, '01'); // Replace with your format logic
+                JsBarcode("#barcodeImage", formattedCode, {
+                    format: "CODE128",
+                    width: 2,
+                    height: 100
+                });
+                document.getElementById('newCode').innerText = `Is this code correct? ${formattedCode}`;
+                document.getElementById('confirmationContainer').style.display = 'block';
+                Quagga.stop(); // Stop scanning after successful detection
+            });
+        }
+    </script>
+</body>
+</html>
